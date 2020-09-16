@@ -102,7 +102,10 @@ train_loader = torch.utils.data.DataLoader(datasets.CIFAR10('../data',
 
 train_push_loader = torch.utils.data.DataLoader(datasets.CIFAR10('../data', 
                                                           download=True, 
-                                                          train=True),
+                                                          train=True, 
+                                                          transform=transforms.Compose([
+                                                              transforms.ToTensor() # first, convert image to PyTorch tensor                                    
+                                                          ])),
                                            batch_size=train_batch_size, num_workers=4, pin_memory=False,
                                            shuffle=True)
 
