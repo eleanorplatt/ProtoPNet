@@ -193,7 +193,8 @@ for epoch in range(num_train_epochs):
             train_push_loader, # pytorch dataloader (must be unnormalized in [0,1])
             prototype_network_parallel=ppnet_multi, # pytorch network with prototype_vectors
             class_specific=class_specific,
-            preprocess_input_function=preprocess_input_function, # normalize if needed
+            #preprocess_input_function=preprocess_input_function, # normalize if needed
+            preprocess_input_function=None,
             prototype_layer_stride=1,
             root_dir_for_saving_prototypes=img_dir, # if not None, prototypes will be saved here
             epoch_number=epoch, # if not provided, prototypes saved previously will be overwritten
