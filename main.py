@@ -54,39 +54,72 @@ from settings import train_dir, test_dir, train_push_dir, \
 normalize = transforms.Normalize(mean=mean,
                                  std=std)
 
-# all datasets
-# train set
-train_dataset = datasets.ImageFolder(
-    train_dir,
-    transforms.Compose([
-        transforms.Resize(size=(img_size, img_size)),
-        transforms.ToTensor(),
-        normalize,
-    ]))
-train_loader = torch.utils.data.DataLoader(
-    train_dataset, batch_size=train_batch_size, shuffle=True,
-    num_workers=4, pin_memory=False)
-# push set
-train_push_dataset = datasets.ImageFolder(
-    train_push_dir,
-    transforms.Compose([
-        transforms.Resize(size=(img_size, img_size)),
-        transforms.ToTensor(),
-    ]))
-train_push_loader = torch.utils.data.DataLoader(
-    train_push_dataset, batch_size=train_push_batch_size, shuffle=False,
-    num_workers=4, pin_memory=False)
-# test set
-test_dataset = datasets.ImageFolder(
-    test_dir,
-    transforms.Compose([
-        transforms.Resize(size=(img_size, img_size)),
-        transforms.ToTensor(),
-        normalize,
-    ]))
-test_loader = torch.utils.data.DataLoader(
-    test_dataset, batch_size=test_batch_size, shuffle=False,
-    num_workers=4, pin_memory=False)
+# # all datasets
+# # train set
+# train_dataset = datasets.ImageFolder(
+#     train_dir,
+#     transforms.Compose([
+#         transforms.Resize(size=(img_size, img_size)),
+#         transforms.ToTensor(),
+#         normalize,
+#     ]))
+# train_loader = torch.utils.data.DataLoader(
+#     train_dataset, batch_size=train_batch_size, shuffle=True,
+#     num_workers=4, pin_memory=False)
+# # push set
+# train_push_dataset = datasets.ImageFolder(
+#     train_push_dir,
+#     transforms.Compose([
+#         transforms.Resize(size=(img_size, img_size)),
+#         transforms.ToTensor(),
+#     ]))
+# train_push_loader = torch.utils.data.DataLoader(
+#     train_push_dataset, batch_size=train_push_batch_size, shuffle=False,
+#     num_workers=4, pin_memory=False)
+# # test set
+# test_dataset = datasets.ImageFolder(
+#     test_dir,
+#     transforms.Compose([
+#         transforms.Resize(size=(img_size, img_size)),
+#         transforms.ToTensor(),
+#         normalize,
+#     ]))
+# test_loader = torch.utils.data.DataLoader(
+#     test_dataset, batch_size=test_batch_size, shuffle=False,
+#     num_workers=4, pin_memory=False)
+
+# MNIST
+
+train_loader = torch.utils.data.DataLoader(datasets.MNIST('../data/MNIST', 
+                                                          download=True, 
+                                                          train=True,
+                                                          transform=transforms.Compose([
+                                                              transforms.ToTensor(), # first, convert image to PyTorch tensor
+                                                              transforms.Normalize((0.1307,), (0.3081,)) # normalize inputs
+                                                          ])), 
+                                           batch_size=train_batch_size, num_workers=4, pin_memory=False,
+                                           shuffle=True)
+
+train_push_loader = torch.utils.data.DataLoader(datasets.MNIST('../data/MNIST', 
+                                                          download=True, 
+                                                          train=True,
+                                                          transform=transforms.Compose([
+                                                              transforms.ToTensor(), # first, convert image to PyTorch tensor
+                                                              transforms.Normalize((0.1307,), (0.3081,)) # normalize inputs
+                                                          ])), 
+                                           batch_size=train_batch_size, num_workers=4, pin_memory=False,
+                                           shuffle=True)
+
+test_loader = torch.utils.data.DataLoader(datasets.MNIST('../data/MNIST', 
+                                                          download=True, 
+                                                          train=False,
+                                                          transform=transforms.Compose([
+                                                              transforms.ToTensor(), # first, convert image to PyTorch tensor
+                                                              transforms.Normalize((0.1307,), (0.3081,)) # normalize inputs
+                                                          ])), 
+                                           batch_size=test_batch_size, num_workers=4, pin_memory=False,
+                                           shuffle=True)
+
 
 # we should look into distributed sampler more carefully at torch.utils.data.distributed.DistributedSampler(train_dataset)
 log('training set size: {0}'.format(len(train_loader.dataset)))
