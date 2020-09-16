@@ -102,11 +102,7 @@ train_loader = torch.utils.data.DataLoader(datasets.CIFAR10('../data',
 
 train_push_loader = torch.utils.data.DataLoader(datasets.CIFAR10('../data', 
                                                           download=True, 
-                                                          train=True,
-                                                          transform=transforms.Compose([
-                                                              transforms.ToTensor(), # first, convert image to PyTorch tensor
-                                                              transforms.Normalize((0.5,0.5,0.5), (0.5,0.5,0.5)) # normalize inputs
-                                                          ])), 
+                                                          train=True),
                                            batch_size=train_batch_size, num_workers=4, pin_memory=False,
                                            shuffle=True)
 
@@ -193,8 +189,7 @@ for epoch in range(num_train_epochs):
             train_push_loader, # pytorch dataloader (must be unnormalized in [0,1])
             prototype_network_parallel=ppnet_multi, # pytorch network with prototype_vectors
             class_specific=class_specific,
-            #preprocess_input_function=preprocess_input_function, # normalize if needed
-            preprocess_input_function=None,
+            preprocess_input_function=preprocess_input_function, # normalize if needed
             prototype_layer_stride=1,
             root_dir_for_saving_prototypes=img_dir, # if not None, prototypes will be saved here
             epoch_number=epoch, # if not provided, prototypes saved previously will be overwritten
