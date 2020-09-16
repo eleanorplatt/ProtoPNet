@@ -88,34 +88,34 @@ normalize = transforms.Normalize(mean=mean,
 #     test_dataset, batch_size=test_batch_size, shuffle=False,
 #     num_workers=4, pin_memory=False)
 
-# MNIST
+# CIFAR10
 
-train_loader = torch.utils.data.DataLoader(datasets.MNIST('../data/MNIST', 
+train_loader = torch.utils.data.DataLoader(datasets.CIFAR10('../data', 
                                                           download=True, 
                                                           train=True,
                                                           transform=transforms.Compose([
                                                               transforms.ToTensor(), # first, convert image to PyTorch tensor
-                                                              transforms.Normalize((0.1307,), (0.3081,)) # normalize inputs
+                                                              transforms.Normalize((0.5,0.5,0.5), (0.5,0.5,0.5)) # normalize inputs
                                                           ])), 
                                            batch_size=train_batch_size, num_workers=4, pin_memory=False,
                                            shuffle=True)
 
-train_push_loader = torch.utils.data.DataLoader(datasets.MNIST('../data/MNIST', 
+train_push_loader = torch.utils.data.DataLoader(datasets.CIFAR10('../data', 
                                                           download=True, 
                                                           train=True,
                                                           transform=transforms.Compose([
                                                               transforms.ToTensor(), # first, convert image to PyTorch tensor
-                                                              transforms.Normalize((0.1307,), (0.3081,)) # normalize inputs
+                                                              transforms.Normalize((0.5,0.5,0.5), (0.5,0.5,0.5)) # normalize inputs
                                                           ])), 
                                            batch_size=train_batch_size, num_workers=4, pin_memory=False,
                                            shuffle=True)
 
-test_loader = torch.utils.data.DataLoader(datasets.MNIST('../data/MNIST', 
+test_loader = torch.utils.data.DataLoader(datasets.CIFAR10('../data', 
                                                           download=True, 
                                                           train=False,
                                                           transform=transforms.Compose([
                                                               transforms.ToTensor(), # first, convert image to PyTorch tensor
-                                                              transforms.Normalize((0.1307,), (0.3081,)) # normalize inputs
+                                                              transforms.Normalize((0.5,0.5,0.5), (0.5,0.5,0.5)) # normalize inputs
                                                           ])), 
                                            batch_size=test_batch_size, num_workers=4, pin_memory=False,
                                            shuffle=True)
