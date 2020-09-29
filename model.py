@@ -74,6 +74,7 @@ class PPNet(nn.Module):
                 [i for i in features.modules() if isinstance(i, nn.BatchNorm2d)][-1].num_features
         else:
             raise Exception('other base base_architecture NOT implemented')
+        
 
         if add_on_layers_type == 'bottleneck':
             add_on_layers = []
@@ -104,7 +105,7 @@ class PPNet(nn.Module):
         
         self.prototype_vectors = nn.Parameter(torch.rand(self.prototype_shape),
                                               requires_grad=True)
-
+        
         # do not make this just a tensor,
         # since it will not be moved automatically to gpu
         self.ones = nn.Parameter(torch.ones(self.prototype_shape),
@@ -113,6 +114,7 @@ class PPNet(nn.Module):
         self.last_layer = nn.Linear(self.num_prototypes, self.num_classes,
                                     bias=False) # do not use bias
 
+        # initialise the weights of the prototype and last layers only
         if init_weights:
             self._initialize_weights()
 
@@ -174,8 +176,8 @@ class PPNet(nn.Module):
         '''
         x is the raw input
         '''
-        conv_features = self.conv_features(x)
-        distances = self._l2_convolution(conv_features)
+        conv_features = self.conv_features(x) # pass x through the resnet and prototype layer
+        distances = self._l2_convolution(conv_features) # compute the distances between the pre-linear activations and prototype vectors
         return distances
 
     def distance_2_similarity(self, distances):
@@ -259,11 +261,16 @@ class PPNet(nn.Module):
         '''
         the incorrect strength will be actual strength if -0.5 then input -0.5
         '''
+        
+        # prototype_class_identity is a [2000, 10] shape set of one-hot vectors saying which class each prototype belongs to
         positive_one_weights_locations = torch.t(self.prototype_class_identity)
         negative_one_weights_locations = 1 - positive_one_weights_locations
 
         correct_class_connection = 1
-        incorrect_class_connection = incorrect_strength
+        incorrect_class_connection = incorrect_strength # -0.5
+
+        # last layer initialised to 1 if correct prototype label to class connection
+        # and -0.5 otherwise
         self.last_layer.weight.data.copy_(
             correct_class_connection * positive_one_weights_locations
             + incorrect_class_connection * negative_one_weights_locations)
@@ -296,6 +303,7 @@ def construct_PPNet(base_architecture, pretrained=True, img_size=224,
                                                          layer_strides=layer_strides,
                                                          layer_paddings=layer_paddings,
                                                          prototype_kernel_size=prototype_shape[2])
+        
     return PPNet(features=features,
                  img_size=img_size,
                  prototype_shape=prototype_shape,
@@ -304,4 +312,5 @@ def construct_PPNet(base_architecture, pretrained=True, img_size=224,
                  init_weights=True,
                  prototype_activation_function=prototype_activation_function,
                  add_on_layers_type=add_on_layers_type)
+
 

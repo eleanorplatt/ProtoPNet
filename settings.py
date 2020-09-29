@@ -1,7 +1,7 @@
-base_architecture = 'resnet50'
-img_size = 32
+base_architecture = 'vgg19'
+img_size = 224
 prototype_shape = (2000, 128, 1, 1)
-num_classes = 10
+num_classes = 200
 prototype_activation_function = 'log'
 add_on_layers_type = 'regular'
 

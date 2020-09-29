@@ -134,21 +134,22 @@ def update_prototypes_on_batch(search_batch_input,
     if preprocess_input_function is not None:
         # print('preprocessing input for pushing ...')
         # search_batch = copy.deepcopy(search_batch_input)
-        search_batch = preprocess_input_function(search_batch_input)
-
+        search_batch = preprocess_input_function(search_batch_input) # normalise the input from the (unnormalised) data loader
     else:
         search_batch = search_batch_input
 
     with torch.no_grad():
         search_batch = search_batch.cuda()
         # this computation currently is not parallelized
-        protoL_input_torch, proto_dist_torch = prototype_network_parallel.module.push_forward(search_batch)
+        protoL_input_torch, proto_dist_torch = prototype_network_parallel.module.push_forward(search_batch) # push the inputs through the network to get the conv_output and distances between the prototypes and conv outputs
 
+    # put the prototype layer of the inputs and distance on the cpu
     protoL_input_ = np.copy(protoL_input_torch.detach().cpu().numpy())
     proto_dist_ = np.copy(proto_dist_torch.detach().cpu().numpy())
 
-    del protoL_input_torch, proto_dist_torch
+    del protoL_input_torch, proto_dist_torch # delete from the gpu
 
+    # if class_specific, make a dictionary to record all inputs in each class
     if class_specific:
         class_to_img_index_dict = {key: [] for key in range(num_classes)}
         # img_y is the image's integer label
@@ -157,31 +158,31 @@ def update_prototypes_on_batch(search_batch_input,
             class_to_img_index_dict[img_label].append(img_index)
 
     prototype_shape = prototype_network_parallel.module.prototype_shape
-    n_prototypes = prototype_shape[0]
-    proto_h = prototype_shape[2]
-    proto_w = prototype_shape[3]
-    max_dist = prototype_shape[1] * prototype_shape[2] * prototype_shape[3]
+    n_prototypes = prototype_shape[0] # number of prototypes (2000)
+    proto_h = prototype_shape[2] # height of prototype (1)
+    proto_w = prototype_shape[3] # width of prototype (1)
+    max_dist = prototype_shape[1] * prototype_shape[2] * prototype_shape[3] # 128*1*1
 
     for j in range(n_prototypes):
         #if n_prototypes_per_class != None:
         if class_specific:
             # target_class is the class of the class_specific prototype
-            target_class = torch.argmax(prototype_network_parallel.module.prototype_class_identity[j]).item()
+            target_class = torch.argmax(prototype_network_parallel.module.prototype_class_identity[j]).item() # prototype_class_identity is a [2000, 10] shape set of one-hot vectors saying which class each prototype belongs to
             # if there is not images of the target_class from this batch
             # we go on to the next prototype
             if len(class_to_img_index_dict[target_class]) == 0:
                 continue
-            proto_dist_j = proto_dist_[class_to_img_index_dict[target_class]][:,j,:,:]
+            proto_dist_j = proto_dist_[class_to_img_index_dict[target_class]][:,j,:,:] # get all the prototype distances for this class
         else:
             # if it is not class specific, then we will search through
             # every example
-            proto_dist_j = proto_dist_[:,j,:,:]
+            proto_dist_j = proto_dist_[:,j,:,:] 
 
-        batch_min_proto_dist_j = np.amin(proto_dist_j)
-        if batch_min_proto_dist_j < global_min_proto_dist[j]:
+        batch_min_proto_dist_j = np.amin(proto_dist_j) # find the minimum prototype distance
+        if batch_min_proto_dist_j < global_min_proto_dist[j]: # if the prototype distance is less than the 
             batch_argmin_proto_dist_j = \
                 list(np.unravel_index(np.argmin(proto_dist_j, axis=None),
-                                      proto_dist_j.shape))
+                                      proto_dist_j.shape)) # find the image which minimises the distance
             if class_specific:
                 '''
                 change the argmin index from the index among
