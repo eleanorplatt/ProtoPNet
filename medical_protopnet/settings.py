@@ -38,9 +38,9 @@ loss_coefficients = {
 }
 
 num_train_epochs = 1000
-num_warm_epochs = 5
+num_warm_epochs = 1
 
-push_start = 10
+push_start = 1
 push_epochs = [i for i in range(num_train_epochs) if i % 10 == 0]
 
 weight_matrix_filename = 'outputL_weights'
