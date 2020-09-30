@@ -153,7 +153,7 @@ if __name__ == "__main__":
                 proto_bound_boxes_filename_prefix=proto_bound_boxes_filename_prefix,
                 save_prototype_class_identity=True,
                 log=log)
-            accu = train_and_test.test(model=ppnet_multi, dataloader=test_loader,
+            accu = train_and_test.test(model=ppnet_multi, device=device, dataloader=test_loader,
                             class_specific=class_specific, log=log)
             save_model_w_condition(model=ppnet, model_dir=model_dir, model_name=str(epoch) + 'push', accu=accu,
                                         target_accu=target_accu, log=log)
