@@ -166,7 +166,7 @@ if __name__ == "__main__":
                                 class_specific=class_specific, loss_coefficients=loss_coefficients, log=log)
                     accu = train_and_test.test(model=ppnet_multi, device=device, dataloader=test_loader,
                                     class_specific=class_specific, log=log)
-                    save_model_w_condition(model=ppnet, device=device, model_dir=model_dir, model_name=str(epoch) + '_' + str(i) + 'push', accu=accu,
+                    save_model_w_condition(model=ppnet, model_dir=model_dir, model_name=str(epoch) + '_' + str(i) + 'push', accu=accu,
                                                 target_accu=target_accu, log=log)
     
     logclose()
