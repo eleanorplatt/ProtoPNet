@@ -33,7 +33,7 @@ def _train_or_test(model, device, dataloader, optimizer=None, class_specific=Tru
             output, min_distances = model(input)
 
             # compute loss
-            cross_entropy = torch.nn.functional.cross_entropy(output, target)
+            cross_entropy = torch.nn.functional.cross_entropy(output, target).to(device)
 
             if class_specific:
                 max_dist = (model.module.prototype_shape[1]

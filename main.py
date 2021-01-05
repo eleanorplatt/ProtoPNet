@@ -113,8 +113,7 @@ ppnet = model.construct_PPNet(base_architecture=base_architecture,
 #if prototype_activation_function == 'linear':
 #    ppnet.set_last_layer_incorrect_connection(incorrect_strength=0)
 ppnet = ppnet.to(device)
-# ppnet_multi = torch.nn.DataParallel(ppnet)
-ppnet_multi = ppnet
+ppnet_multi = torch.nn.DataParallel(ppnet)
 class_specific = True
 
 # define optimizer
@@ -124,19 +123,19 @@ joint_optimizer_specs = \
  {'params': ppnet.add_on_layers.parameters(), 'lr': joint_optimizer_lrs['add_on_layers'], 'weight_decay': 1e-3},
  {'params': ppnet.prototype_vectors, 'lr': joint_optimizer_lrs['prototype_vectors']},
 ]
-joint_optimizer = torch.optim.Adam(joint_optimizer_specs)
-joint_lr_scheduler = torch.optim.lr_scheduler.StepLR(joint_optimizer, step_size=joint_lr_step_size, gamma=0.1)
+joint_optimizer = torch.optim.Adam(joint_optimizer_specs).to(device)
+joint_lr_scheduler = torch.optim.lr_scheduler.StepLR(joint_optimizer, step_size=joint_lr_step_size, gamma=0.1).to(device)
 
 from settings import warm_optimizer_lrs
 warm_optimizer_specs = \
 [{'params': ppnet.add_on_layers.parameters(), 'lr': warm_optimizer_lrs['add_on_layers'], 'weight_decay': 1e-3},
  {'params': ppnet.prototype_vectors, 'lr': warm_optimizer_lrs['prototype_vectors']},
 ]
-warm_optimizer = torch.optim.Adam(warm_optimizer_specs)
+warm_optimizer = torch.optim.Adam(warm_optimizer_specs).to(device)
 
 from settings import last_layer_optimizer_lr
 last_layer_optimizer_specs = [{'params': ppnet.last_layer.parameters(), 'lr': last_layer_optimizer_lr}]
-last_layer_optimizer = torch.optim.Adam(last_layer_optimizer_specs)
+last_layer_optimizer = torch.optim.Adam(last_layer_optimizer_specs).to(device)
 
 # weighting of different training losses
 from settings import coefs
@@ -148,9 +147,11 @@ from settings import num_train_epochs, num_warm_epochs, push_start, push_epochs
 log('start training')
 import copy
 for epoch in range(num_train_epochs):
+    print("starting training epoch ", epoch)
     log('epoch: \t{0}'.format(epoch))
 
     if epoch < num_warm_epochs:
+        print("warm start")
         tnt.warm_only(model=ppnet_multi, log=log)
         _ = tnt.train(model=ppnet_multi, device=device, dataloader=train_loader, optimizer=warm_optimizer,
                       class_specific=class_specific, coefs=coefs, log=log)
