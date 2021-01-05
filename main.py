@@ -113,7 +113,8 @@ ppnet = model.construct_PPNet(base_architecture=base_architecture,
 #if prototype_activation_function == 'linear':
 #    ppnet.set_last_layer_incorrect_connection(incorrect_strength=0)
 ppnet = ppnet.to(device)
-ppnet_multi = torch.nn.DataParallel(ppnet)
+# ppnet_multi = torch.nn.DataParallel(ppnet)
+ppnet_multi = ppnet
 class_specific = True
 
 # define optimizer
