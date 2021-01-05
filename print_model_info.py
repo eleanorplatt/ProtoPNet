@@ -40,8 +40,8 @@ if __name__ == "__main__":
                                 num_classes=num_classes,
                                 prototype_activation_function=prototype_activation_function,
                                 add_on_layers_type=add_on_layers_type)
-    if prototype_activation_function == 'linear':
-       ppnet.set_last_layer_incorrect_connection(incorrect_strength=0)
+   #  if prototype_activation_function == 'linear':
+   #     ppnet.set_last_layer_incorrect_connection(incorrect_strength=0)
     ppnet_multi = torch.nn.DataParallel(ppnet)
     class_specific = True
 

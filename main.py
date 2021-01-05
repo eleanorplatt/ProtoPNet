@@ -88,38 +88,6 @@ test_loader = torch.utils.data.DataLoader(
     test_dataset, batch_size=test_batch_size, shuffle=False,
     num_workers=4, pin_memory=False)
 
-# # CIFAR10
-
-# train_loader = torch.utils.data.DataLoader(datasets.CIFAR10('../data', 
-#                                                           download=True, 
-#                                                           train=True,
-#                                                           transform=transforms.Compose([
-#                                                               transforms.ToTensor(), # first, convert image to PyTorch tensor
-#                                                               transforms.Normalize((0.5,0.5,0.5), (0.5,0.5,0.5)) # normalize inputs
-#                                                           ])), 
-#                                            batch_size=train_batch_size, num_workers=4, pin_memory=False,
-#                                            shuffle=True)
-
-# train_push_loader = torch.utils.data.DataLoader(datasets.CIFAR10('../data', 
-#                                                           download=True, 
-#                                                           train=True, 
-#                                                           transform=transforms.Compose([
-#                                                               transforms.ToTensor() # first, convert image to PyTorch tensor                                    
-#                                                           ])),
-#                                            batch_size=train_batch_size, num_workers=4, pin_memory=False,
-#                                            shuffle=True)
-
-# test_loader = torch.utils.data.DataLoader(datasets.CIFAR10('../data', 
-#                                                           download=True, 
-#                                                           train=False,
-#                                                           transform=transforms.Compose([
-#                                                               transforms.ToTensor(), # first, convert image to PyTorch tensor
-#                                                               transforms.Normalize((0.5,0.5,0.5), (0.5,0.5,0.5)) # normalize inputs
-#                                                           ])), 
-#                                            batch_size=test_batch_size, num_workers=4, pin_memory=False,
-#                                            shuffle=True)
-
-
 # we should look into distributed sampler more carefully at torch.utils.data.distributed.DistributedSampler(train_dataset)
 log('training set size: {0}'.format(len(train_loader.dataset)))
 log('push set size: {0}'.format(len(train_push_loader.dataset)))
