@@ -20,10 +20,19 @@ from log import create_logger
 from preprocess import mean, std, preprocess_input_function
 
 parser = argparse.ArgumentParser()
-parser.add_argument('-gpuid', nargs=1, type=str, default='0') # python3 main.py -gpuid=0,1,2,3
+parser.add_argument('--GPU', type=str, default='0')
+parser.add_argument('--seed', type=int, default=1) 
 args = parser.parse_args()
-os.environ['CUDA_VISIBLE_DEVICES'] = args.gpuid[0]
-print(os.environ['CUDA_VISIBLE_DEVICES'])
+
+# reproducibility
+torch.backends.cudnn.deterministic = True
+torch.backend.cudnn.benchmark = False
+torch.manual_seed(args.seed)
+
+# device
+os.environ['CUDA_VISIBLE_DEVICES'] = args.GPU
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print("Device:", device)
 
 # book keeping namings and code
 from settings import base_architecture, img_size, prototype_shape, num_classes, \
@@ -103,7 +112,7 @@ ppnet = model.construct_PPNet(base_architecture=base_architecture,
                               add_on_layers_type=add_on_layers_type)
 #if prototype_activation_function == 'linear':
 #    ppnet.set_last_layer_incorrect_connection(incorrect_strength=0)
-ppnet = ppnet.cuda()
+ppnet = ppnet.to(device)
 ppnet_multi = torch.nn.DataParallel(ppnet)
 class_specific = True
 
@@ -142,15 +151,15 @@ for epoch in range(num_train_epochs):
 
     if epoch < num_warm_epochs:
         tnt.warm_only(model=ppnet_multi, log=log)
-        _ = tnt.train(model=ppnet_multi, dataloader=train_loader, optimizer=warm_optimizer,
+        _ = tnt.train(model=ppnet_multi, device=device, dataloader=train_loader, optimizer=warm_optimizer,
                       class_specific=class_specific, coefs=coefs, log=log)
     else:
         tnt.joint(model=ppnet_multi, log=log)
         joint_lr_scheduler.step()
-        _ = tnt.train(model=ppnet_multi, dataloader=train_loader, optimizer=joint_optimizer,
+        _ = tnt.train(model=ppnet_multi, device=device, dataloader=train_loader, optimizer=joint_optimizer,
                       class_specific=class_specific, coefs=coefs, log=log)
 
-    accu = tnt.test(model=ppnet_multi, dataloader=test_loader,
+    accu = tnt.test(model=ppnet_multi, device=device, dataloader=test_loader,
                     class_specific=class_specific, log=log)
     save.save_model_w_condition(model=ppnet, model_dir=model_dir, model_name=str(epoch) + 'nopush', accu=accu,
                                 target_accu=0.70, log=log)
@@ -158,6 +167,7 @@ for epoch in range(num_train_epochs):
     if epoch >= push_start and epoch in push_epochs:
         push.push_prototypes(
             train_push_loader, # pytorch dataloader (must be unnormalized in [0,1])
+            device,
             prototype_network_parallel=ppnet_multi, # pytorch network with prototype_vectors
             class_specific=class_specific,
             preprocess_input_function=preprocess_input_function, # normalize if needed
@@ -169,7 +179,7 @@ for epoch in range(num_train_epochs):
             proto_bound_boxes_filename_prefix=proto_bound_boxes_filename_prefix,
             save_prototype_class_identity=True,
             log=log)
-        accu = tnt.test(model=ppnet_multi, dataloader=test_loader,
+        accu = tnt.test(model=ppnet_multi, device=device, dataloader=test_loader,
                         class_specific=class_specific, log=log)
         save.save_model_w_condition(model=ppnet, model_dir=model_dir, model_name=str(epoch) + 'push', accu=accu,
                                     target_accu=0.70, log=log)
@@ -178,9 +188,9 @@ for epoch in range(num_train_epochs):
             tnt.last_only(model=ppnet_multi, log=log)
             for i in range(20):
                 log('iteration: \t{0}'.format(i))
-                _ = tnt.train(model=ppnet_multi, dataloader=train_loader, optimizer=last_layer_optimizer,
+                _ = tnt.train(model=ppnet_multi, device=device, dataloader=train_loader, optimizer=last_layer_optimizer,
                               class_specific=class_specific, coefs=coefs, log=log)
-                accu = tnt.test(model=ppnet_multi, dataloader=test_loader,
+                accu = tnt.test(model=ppnet_multi, device=device, dataloader=test_loader,
                                 class_specific=class_specific, log=log)
                 save.save_model_w_condition(model=ppnet, model_dir=model_dir, model_name=str(epoch) + '_' + str(i) + 'push', accu=accu,
                                             target_accu=0.70, log=log)

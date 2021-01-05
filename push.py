@@ -11,6 +11,7 @@ from helpers import makedir, find_high_activation_crop
 
 # push each prototype to the nearest patch in the training set
 def push_prototypes(dataloader, # pytorch dataloader (must be unnormalized in [0,1])
+                    device,
                     prototype_network_parallel, # pytorch network with prototype_vectors
                     class_specific=True,
                     preprocess_input_function=None, # normalize if needed
@@ -80,7 +81,7 @@ def push_prototypes(dataloader, # pytorch dataloader (must be unnormalized in [0
         '''
         start_index_of_search_batch = push_iter * search_batch_size
 
-        update_prototypes_on_batch(search_batch_input,
+        update_prototypes_on_batch(device, search_batch_input,
                                    start_index_of_search_batch,
                                    prototype_network_parallel,
                                    global_min_proto_dist,
@@ -106,13 +107,13 @@ def push_prototypes(dataloader, # pytorch dataloader (must be unnormalized in [0
     log('\tExecuting push ...')
     prototype_update = np.reshape(global_min_fmap_patches,
                                   tuple(prototype_shape))
-    prototype_network_parallel.module.prototype_vectors.data.copy_(torch.tensor(prototype_update, dtype=torch.float32).cuda())
-    # prototype_network_parallel.cuda()
+    prototype_network_parallel.module.prototype_vectors.data.copy_(torch.tensor(prototype_update, dtype=torch.float32).to(device))
+    # prototype_network_parallel.to(device)
     end = time.time()
     log('\tpush time: \t{0}'.format(end -  start))
 
 # update each prototype for current search batch
-def update_prototypes_on_batch(search_batch_input,
+def update_prototypes_on_batch(device, search_batch_input,
                                start_index_of_search_batch,
                                prototype_network_parallel,
                                global_min_proto_dist, # this will be updated
@@ -139,7 +140,7 @@ def update_prototypes_on_batch(search_batch_input,
         search_batch = search_batch_input
 
     with torch.no_grad():
-        search_batch = search_batch.cuda()
+        search_batch = search_batch.to(device)
         # this computation currently is not parallelized
         protoL_input_torch, proto_dist_torch = prototype_network_parallel.module.push_forward(search_batch) # push the inputs through the network to get the conv_output and distances between the prototypes and conv outputs
 
