@@ -26,7 +26,7 @@ args = parser.parse_args()
 
 # reproducibility
 torch.backends.cudnn.deterministic = True
-torch.backend.cudnn.benchmark = False
+torch.backends.cudnn.benchmark = False
 torch.manual_seed(args.seed)
 
 # device
