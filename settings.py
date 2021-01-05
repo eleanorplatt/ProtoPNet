@@ -1,4 +1,4 @@
-base_architecture = 'vgg19'
+base_architecture = 'resnet50'
 img_size = 224
 prototype_shape = (2000, 128, 1, 1)
 num_classes = 200

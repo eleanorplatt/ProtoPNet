@@ -1,21 +1,38 @@
+import os
+import shutil
+
+import torch
+import torch.utils.data
+# import torch.utils.data.distributed
+import torchvision.transforms as transforms
+import torchvision.datasets as datasets
+
+import argparse
+import re
+
+from helpers import makedir
+import model
+import prune
+import train_and_test as tnt
+import save
+from log import create_logger
+from preprocess import mean, std, preprocess_input_function
+
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
 import cv2
-import os
 import copy
 import time
 
 from receptive_field import compute_rf_prototype
-from utils import makedir, find_high_activation_crop
+from helpers import makedir, find_high_activation_crop
 
 # push each prototype to the nearest patch in the training set
 def push_prototypes(dataloader, # pytorch dataloader (must be unnormalized in [0,1])
                     prototype_network_parallel, # pytorch network with prototype_vectors
                     class_specific=True,
                     preprocess_input_function=None, # normalize if needed
-                    mean=None, # mean for normalisation
-                    std=None, # std for normalisation
                     prototype_layer_stride=1,
                     root_dir_for_saving_prototypes=None, # if not None, prototypes will be saved here
                     epoch_number=None, # if not provided, prototypes saved previously will be overwritten
@@ -93,8 +110,6 @@ def push_prototypes(dataloader, # pytorch dataloader (must be unnormalized in [0
                                    search_y=search_y,
                                    num_classes=num_classes,
                                    preprocess_input_function=preprocess_input_function,
-                                   mean=mean,
-                                   std=std,
                                    prototype_layer_stride=prototype_layer_stride,
                                    dir_for_saving_prototypes=proto_epoch_dir,
                                    prototype_img_filename_prefix=prototype_img_filename_prefix,
@@ -110,7 +125,7 @@ def push_prototypes(dataloader, # pytorch dataloader (must be unnormalized in [0
     log('\tExecuting push ...')
     prototype_update = np.reshape(global_min_fmap_patches,
                                   tuple(prototype_shape))
-    prototype_network_parallel.module.prototype_vectors.data.copy_(torch.tensor(prototype_update, dtype=torch.float32).cuda())
+    prototype_network_parallel.module.prototype_vectors.data.copy_(torch.tensor(prototype_update, dtype=torch.float32).cpu())
     # prototype_network_parallel.cuda()
     end = time.time()
     log('\tpush time: \t{0}'.format(end -  start))
@@ -127,8 +142,6 @@ def update_prototypes_on_batch(search_batch_input,
                                search_y=None, # required if class_specific == True
                                num_classes=None, # required if class_specific == True
                                preprocess_input_function=None,
-                               mean=None,
-                               std=None,
                                prototype_layer_stride=1,
                                dir_for_saving_prototypes=None,
                                prototype_img_filename_prefix=None,
@@ -140,22 +153,23 @@ def update_prototypes_on_batch(search_batch_input,
     if preprocess_input_function is not None:
         # print('preprocessing input for pushing ...')
         # search_batch = copy.deepcopy(search_batch_input)
-        search_batch = preprocess_input_function(search_batch_input, mean, std) # normalise the input from the (unnormalised) data loader
+        search_batch = preprocess_input_function(search_batch_input) # normalise the input from the (unnormalised) data loader
     else:
         search_batch = search_batch_input
 
     with torch.no_grad():
-        search_batch = search_batch.cuda()
+        search_batch = search_batch.cpu()
         # this computation currently is not parallelized
         protoL_input_torch, proto_dist_torch = prototype_network_parallel.module.push_forward(search_batch) # push the inputs through the network to get the conv_output and distances between the prototypes and conv outputs
 
     # put the prototype layer of the inputs and distance on the cpu
-    protoL_input_ = np.copy(protoL_input_torch.detach().cpu().numpy())
-    proto_dist_ = np.copy(proto_dist_torch.detach().cpu().numpy())
+    protoL_input_ = np.copy(protoL_input_torch.detach().cpu().numpy()) # the conv output
+    proto_dist_ = np.copy(proto_dist_torch.detach().cpu().numpy()) # distances between each prototype and the h x w spatial vectors in the conv output
 
     del protoL_input_torch, proto_dist_torch # delete from the gpu
 
     # if class_specific, make a dictionary to record all inputs in each class
+    # dictionary is class integer label : [idx in batch]
     if class_specific:
         class_to_img_index_dict = {key: [] for key in range(num_classes)}
         # img_y is the image's integer label
@@ -170,25 +184,29 @@ def update_prototypes_on_batch(search_batch_input,
     max_dist = prototype_shape[1] * prototype_shape[2] * prototype_shape[3] # 128*1*1
 
     for j in range(n_prototypes):
+        print('Prototype ', j)
         #if n_prototypes_per_class != None:
         if class_specific:
             # target_class is the class of the class_specific prototype
-            target_class = torch.argmax(prototype_network_parallel.module.prototype_class_identity[j]).item() # prototype_class_identity is a [2000, 10] shape set of one-hot vectors saying which class each prototype belongs to
+            target_class = torch.argmax(prototype_network_parallel.module.prototype_class_identity[j]).item() # prototype_class_identity is a [2000, 10] shape set of one-hot vectors saying which class each prototype belongs to            
+                        
             # if there is not images of the target_class from this batch
             # we go on to the next prototype
             if len(class_to_img_index_dict[target_class]) == 0:
                 continue
-            proto_dist_j = proto_dist_[class_to_img_index_dict[target_class]][:,j,:,:] # get all the prototype distances for this class
+            proto_dist_j = proto_dist_[class_to_img_index_dict[target_class]][:,j,:,:] # get all the distances for this prototype class
         else:
             # if it is not class specific, then we will search through
             # every example
             proto_dist_j = proto_dist_[:,j,:,:] 
 
         batch_min_proto_dist_j = np.amin(proto_dist_j) # find the minimum prototype distance
-        if batch_min_proto_dist_j < global_min_proto_dist[j]: # if the prototype distance is less than the 
+        
+        if batch_min_proto_dist_j < global_min_proto_dist[j]: 
             batch_argmin_proto_dist_j = \
                 list(np.unravel_index(np.argmin(proto_dist_j, axis=None),
                                       proto_dist_j.shape)) # find the image which minimises the distance
+            
             if class_specific:
                 '''
                 change the argmin index from the index among
@@ -203,7 +221,7 @@ def update_prototypes_on_batch(search_batch_input,
             fmap_height_end_index = fmap_height_start_index + proto_h
             fmap_width_start_index = batch_argmin_proto_dist_j[2] * prototype_layer_stride
             fmap_width_end_index = fmap_width_start_index + proto_w
-
+            
             batch_min_fmap_patch_j = protoL_input_[img_index_in_batch,
                                                    :,
                                                    fmap_height_start_index:fmap_height_end_index,
@@ -214,9 +232,11 @@ def update_prototypes_on_batch(search_batch_input,
             
             # get the receptive field boundary of the image patch
             # that generates the representation
-            protoL_rf_info = prototype_network_parallel.module.proto_layer_rf_info
+            protoL_rf_info = prototype_network_parallel.module.proto_layer_rf_info # [7, 32, 268, 16.0]
             rf_prototype_j = compute_rf_prototype(search_batch.size(2), batch_argmin_proto_dist_j, protoL_rf_info)
-            
+            print(search_batch.size(2), batch_argmin_proto_dist_j, protoL_rf_info, rf_prototype_j)
+            ### COME BACK TO WHAT rf_prototype_j IS ###
+
             # get the whole image
             original_img_j = search_batch_input[rf_prototype_j[0]]
             original_img_j = original_img_j.numpy()
@@ -246,7 +266,9 @@ def update_prototypes_on_batch(search_batch_input,
                 proto_act_img_j = prototype_activation_function_in_numpy(proto_dist_img_j)
             upsampled_act_img_j = cv2.resize(proto_act_img_j, dsize=(original_img_size, original_img_size),
                                              interpolation=cv2.INTER_CUBIC)
-            proto_bound_j = find_high_activation_crop(upsampled_act_img_j)
+            
+            proto_bound_j = find_high_activation_crop(upsampled_act_img_j) # lower y, upper y + 1, lower x, upper x + 1
+                        
             # crop out the image patch with high activation as prototype image
             proto_img_j = original_img_j[proto_bound_j[0]:proto_bound_j[1],
                                          proto_bound_j[2]:proto_bound_j[3], :]
@@ -310,3 +332,174 @@ def update_prototypes_on_batch(search_batch_input,
                 
     if class_specific:
         del class_to_img_index_dict
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument('-gpuid', nargs=1, type=str, default='0') # python3 main.py -gpuid=0,1,2,3
+args = parser.parse_args()
+os.environ['CUDA_VISIBLE_DEVICES'] = args.gpuid[0]
+print(os.environ['CUDA_VISIBLE_DEVICES'])
+
+# book keeping namings and code
+from settings import base_architecture, img_size, prototype_shape, num_classes, \
+                     prototype_activation_function, add_on_layers_type, experiment_run
+
+base_architecture_type = re.match('^[a-z]*', base_architecture).group(0)
+
+model_dir = './saved_models/' + base_architecture + '/' + experiment_run + '/'
+makedir(model_dir)
+shutil.copy(src=os.path.join(os.getcwd(), __file__), dst=model_dir)
+shutil.copy(src=os.path.join(os.getcwd(), 'settings.py'), dst=model_dir)
+shutil.copy(src=os.path.join(os.getcwd(), base_architecture_type + '_features.py'), dst=model_dir)
+shutil.copy(src=os.path.join(os.getcwd(), 'model.py'), dst=model_dir)
+shutil.copy(src=os.path.join(os.getcwd(), 'train_and_test.py'), dst=model_dir)
+
+log, logclose = create_logger(log_filename=os.path.join(model_dir, 'train.log'))
+img_dir = os.path.join(model_dir, 'img')
+makedir(img_dir)
+weight_matrix_filename = 'outputL_weights'
+prototype_img_filename_prefix = 'prototype-img'
+prototype_self_act_filename_prefix = 'prototype-self-act'
+proto_bound_boxes_filename_prefix = 'bb'
+
+# load the data
+from settings import train_dir, test_dir, train_push_dir, \
+                     train_batch_size, test_batch_size, train_push_batch_size
+
+normalize = transforms.Normalize(mean=mean,
+                                 std=std)
+
+# all datasets
+# train set
+train_dataset = datasets.ImageFolder(
+    train_dir,
+    transforms.Compose([
+        transforms.Resize(size=(img_size, img_size)),
+        transforms.ToTensor(),
+        normalize,
+    ]))
+train_loader = torch.utils.data.DataLoader(
+    train_dataset, batch_size=train_batch_size, shuffle=True,
+    num_workers=4, pin_memory=False)
+# push set
+train_push_dataset = datasets.ImageFolder(
+    train_push_dir,
+    transforms.Compose([
+        transforms.Resize(size=(img_size, img_size)),
+        transforms.ToTensor(),
+    ]))
+train_push_loader = torch.utils.data.DataLoader(
+    train_push_dataset, batch_size=train_push_batch_size, shuffle=False,
+    num_workers=4, pin_memory=False)
+# test set
+test_dataset = datasets.ImageFolder(
+    test_dir,
+    transforms.Compose([
+        transforms.Resize(size=(img_size, img_size)),
+        transforms.ToTensor(),
+        normalize,
+    ]))
+test_loader = torch.utils.data.DataLoader(
+    test_dataset, batch_size=test_batch_size, shuffle=False,
+    num_workers=4, pin_memory=False)
+
+
+# we should look into distributed sampler more carefully at torch.utils.data.distributed.DistributedSampler(train_dataset)
+log('training set size: {0}'.format(len(train_loader.dataset)))
+log('push set size: {0}'.format(len(train_push_loader.dataset)))
+log('test set size: {0}'.format(len(test_loader.dataset)))
+log('batch size: {0}'.format(train_batch_size))
+
+# construct the model
+ppnet = model.construct_PPNet(base_architecture=base_architecture,
+                              pretrained=True, img_size=img_size,
+                              prototype_shape=prototype_shape,
+                              num_classes=num_classes,
+                              prototype_activation_function=prototype_activation_function,
+                              add_on_layers_type=add_on_layers_type)
+#if prototype_activation_function == 'linear':
+#    ppnet.set_last_layer_incorrect_connection(incorrect_strength=0)
+# ppnet = ppnet.cuda()
+ppnet_multi = torch.nn.DataParallel(ppnet)
+class_specific = True
+
+# define optimizer
+from settings import joint_optimizer_lrs, joint_lr_step_size
+joint_optimizer_specs = \
+[{'params': ppnet.features.parameters(), 'lr': joint_optimizer_lrs['features'], 'weight_decay': 1e-3}, # bias are now also being regularized
+ {'params': ppnet.add_on_layers.parameters(), 'lr': joint_optimizer_lrs['add_on_layers'], 'weight_decay': 1e-3},
+ {'params': ppnet.prototype_vectors, 'lr': joint_optimizer_lrs['prototype_vectors']},
+]
+joint_optimizer = torch.optim.Adam(joint_optimizer_specs)
+joint_lr_scheduler = torch.optim.lr_scheduler.StepLR(joint_optimizer, step_size=joint_lr_step_size, gamma=0.1)
+
+from settings import warm_optimizer_lrs
+warm_optimizer_specs = \
+[{'params': ppnet.add_on_layers.parameters(), 'lr': warm_optimizer_lrs['add_on_layers'], 'weight_decay': 1e-3},
+ {'params': ppnet.prototype_vectors, 'lr': warm_optimizer_lrs['prototype_vectors']},
+]
+warm_optimizer = torch.optim.Adam(warm_optimizer_specs)
+
+from settings import last_layer_optimizer_lr
+last_layer_optimizer_specs = [{'params': ppnet.last_layer.parameters(), 'lr': last_layer_optimizer_lr}]
+last_layer_optimizer = torch.optim.Adam(last_layer_optimizer_specs)
+
+# weighting of different training losses
+from settings import coefs
+
+# number of training epochs, number of warm epochs, push start epoch, push epochs
+from settings import num_train_epochs, num_warm_epochs, push_start, push_epochs
+
+# train the model
+log('start training')
+import copy
+for epoch in range(num_train_epochs):
+    log('epoch: \t{0}'.format(epoch))
+
+    # if epoch < num_warm_epochs:
+    #     tnt.warm_only(model=ppnet_multi, log=log)
+    #     _ = tnt.train(model=ppnet_multi, dataloader=train_loader, optimizer=warm_optimizer,
+    #                   class_specific=class_specific, coefs=coefs, log=log)
+    # else:
+    #     tnt.joint(model=ppnet_multi, log=log)
+    #     joint_lr_scheduler.step()
+    #     _ = tnt.train(model=ppnet_multi, dataloader=train_loader, optimizer=joint_optimizer,
+    #                   class_specific=class_specific, coefs=coefs, log=log)
+
+    # accu = tnt.test(model=ppnet_multi, dataloader=test_loader,
+    #                 class_specific=class_specific, log=log)
+    # save.save_model_w_condition(model=ppnet, model_dir=model_dir, model_name=str(epoch) + 'nopush', accu=accu,
+    #                             target_accu=0.70, log=log)
+
+    # if epoch >= push_start and epoch in push_epochs:
+    push_prototypes(
+        train_push_loader, # pytorch dataloader (must be unnormalized in [0,1])
+        prototype_network_parallel=ppnet_multi, # pytorch network with prototype_vectors
+        class_specific=class_specific,
+        preprocess_input_function=preprocess_input_function, # normalize if needed
+        prototype_layer_stride=1,
+        root_dir_for_saving_prototypes=img_dir, # if not None, prototypes will be saved here
+        epoch_number=epoch, # if not provided, prototypes saved previously will be overwritten
+        prototype_img_filename_prefix=prototype_img_filename_prefix,
+        prototype_self_act_filename_prefix=prototype_self_act_filename_prefix,
+        proto_bound_boxes_filename_prefix=proto_bound_boxes_filename_prefix,
+        save_prototype_class_identity=True,
+        log=log)
+    accu = tnt.test(model=ppnet_multi, dataloader=test_loader,
+                    class_specific=class_specific, log=log)
+    save.save_model_w_condition(model=ppnet, model_dir=model_dir, model_name=str(epoch) + 'push', accu=accu,
+                                target_accu=0.70, log=log)
+
+    if prototype_activation_function != 'linear':
+        tnt.last_only(model=ppnet_multi, log=log)
+        for i in range(20):
+            log('iteration: \t{0}'.format(i))
+            _ = tnt.train(model=ppnet_multi, dataloader=train_loader, optimizer=last_layer_optimizer,
+                            class_specific=class_specific, coefs=coefs, log=log)
+            accu = tnt.test(model=ppnet_multi, dataloader=test_loader,
+                            class_specific=class_specific, log=log)
+            save.save_model_w_condition(model=ppnet, model_dir=model_dir, model_name=str(epoch) + '_' + str(i) + 'push', accu=accu,
+                                        target_accu=0.70, log=log)
+   
+logclose()
+

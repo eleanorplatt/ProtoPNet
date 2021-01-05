@@ -208,7 +208,7 @@ def update_prototypes_on_batch(search_batch_input,
             
             # get the receptive field boundary of the image patch
             # that generates the representation
-            protoL_rf_info = prototype_network_parallel.module.proto_layer_rf_info
+            protoL_rf_info = prototype_network_parallel.module.proto_layer_rf_info # [7, 32, 268, 16.0]
             rf_prototype_j = compute_rf_prototype(search_batch.size(2), batch_argmin_proto_dist_j, protoL_rf_info)
             
             # get the whole image
