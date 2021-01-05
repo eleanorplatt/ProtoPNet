@@ -5,7 +5,7 @@ num_classes = 200
 prototype_activation_function = 'log'
 add_on_layers_type = 'regular'
 
-experiment_run = '003'
+experiment_run = 'resnet50_cub200_05-01-21'
 
 data_path = '../data/cub200_cropped/'
 train_dir = data_path + 'train_cropped_augmented/'
